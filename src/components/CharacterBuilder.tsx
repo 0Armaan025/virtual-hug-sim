@@ -1,166 +1,202 @@
 "use client";
-import { Character } from '@/types';
+import { Character, Gender } from '@/types';
+import CharacterSprite from './CharacterSprite';
 import {
-  DEFAULT_CHARACTER, HAIR_COLORS, HAIR_STYLES, SKIN_COLORS, OUTFIT_COLORS, OUTFIT_TYPES, ACCESSORIES,
+  HAIR_COLORS, HAIR_STYLES, SKIN_COLORS, OUTFIT_COLORS, OUTFIT_TYPES_BY_GENDER, ACCESSORIES,
 } from '@/lib/character-state';
 
-export default function CharacterBuilder({ character, onChange }: { character: Character; onChange: (c: Character) => void }) {
-  const char = character;
+const GENDERS: { id: Gender; label: string; icon: string }[] = [
+  { id: 'female', label: 'Female', icon: '♀' },
+  { id: 'male', label: 'Male', icon: '♂' },
+  { id: 'nonbinary', label: 'Non-binary', icon: '⚧' },
+];
 
-  const update = (field: keyof Character, value: string) => {
-    onChange({ ...char, [field]: value });
-  };
+const ACC_ICONS: Record<string, string> = {
+  none: '—', glasses: '👓', sunglasses: '🕶', hat: '🎩', beanie: '🧢',
+  headphones: '🎧', bow: '🎀', flower: '🌸', scarf: '🧣', earrings: '💎', mask: '😷',
+};
+
+export default function CharacterBuilder({ character, onChange }: { character: Character; onChange: (c: Character) => void }) {
+  const set = (patch: Partial<Character>) => onChange({ ...character, ...patch });
+  const hairStyles = HAIR_STYLES[character.gender];
+  const outfitTypes = OUTFIT_TYPES_BY_GENDER[character.gender];
 
   return (
-    <div style={{
-      background: '#fff8f0',
-      borderRadius: '1.5rem',
-      padding: '2rem',
-      boxShadow: '0 6px 30px rgba(212,106,106,0.1)',
-      maxWidth: '520px',
-      margin: '0 auto',
+    <section style={{
+      background: 'linear-gradient(165deg, rgba(255,255,255,.055), rgba(255,255,255,.02))',
+      border: '1px solid rgba(255,255,255,.09)', borderRadius: 28,
+      backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+      boxShadow: '0 24px 60px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.09)',
+      padding: '1.75rem', maxWidth: 560, margin: '0 auto',
     }}>
-      <h2 style={{ color: '#c47a4a', fontSize: '1.8rem', marginBottom: '1.2rem', textAlign: 'center' }}>
-        Customize Your Character
-      </h2>
+      <header style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
+        <h2 style={{ margin: 0, fontSize: '1.45rem', fontWeight: 800, letterSpacing: '-0.02em' }}>Design your avatar</h2>
+        <p style={{ margin: '.35rem 0 0', fontSize: '.85rem', color: 'rgba(245,235,230,.55)' }}>Everything updates live in the room</p>
+      </header>
 
-      {/* Character Preview */}
+      {/* Preview */}
       <div style={{
-        background: '#ffebd6',
-        borderRadius: '1rem',
-        padding: '1.5rem',
-        marginBottom: '1.5rem',
-        textAlign: 'center',
-        border: '2px solid #f5d0a9',
+        position: 'relative', borderRadius: 22, padding: '1.25rem', marginBottom: '1.5rem',
+        background: 'radial-gradient(circle at 50% 82%, rgba(224,83,122,.22), rgba(90,122,224,.12) 45%, transparent 72%), rgba(255,255,255,.03)',
+        border: '1px solid rgba(255,255,255,.07)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '.4rem',
       }}>
-        <div style={{
-          width: 100, height: 140,
-          margin: '0 auto',
-          position: 'relative',
-          background: 'radial-gradient(circle at 50% 30%, #ffe4c4 60%, #f0c8a0 100%)',
-          borderRadius: '50px 50px 20px 20px',
-          overflow: 'hidden',
-          border: '3px solid #d46a6a',
-        }}>
-          {/* Hair */}
-          <div style={{
-            position: 'absolute', top: -10, left: 0, right: 0, height: 50,
-            background: char.hairColor,
-            borderRadius: '50% 50% 0 0',
-            clipPath: char.hairStyle === 'long' ? 'ellipse(40% 45% at 50% 30%)' : 'ellipse(45% 50% at 50% 25%)',
-            opacity: 0.85,
-          }} />
-          {/* Skin */}
-          <div style={{
-            position: 'absolute', top: 40, left: 20, right: 20, height: 60,
-            background: char.skinColor,
-            borderRadius: '30px',
-          }} />
-          {/* Outfit */}
-          <div style={{
-            position: 'absolute', bottom: 10, left: 10, right: 10, height: 50,
-            background: char.outfitColor,
-            borderRadius: '15px 15px 5px 5px',
-          }} />
-          {/* Accessory */}
-          {char.accessory === 'glasses' && (
-            <div style={{
-              position: 'absolute', top: 55, left: 30, width: 40, height: 10,
-              border: '3px solid #5a3d2b', borderRadius: '10px',
-            }} />
-          )}
-          {char.accessory === 'hat' && (
-            <div style={{
-              position: 'absolute', top: -5, left: 15, width: 70, height: 25,
-              background: '#5a3d2b', borderRadius: '15px 15px 0 0',
-            }} />
-          )}
-          {char.accessory === 'flower' && (
-            <div style={{
-              position: 'absolute', top: 5, right: 10,
-              width: 20, height: 20, background: '#d46a6a', borderRadius: '50%',
-            }} />
-          )}
+        <div style={{ position: 'absolute', inset: 0, borderRadius: 22, background: 'radial-gradient(circle at 50% 100%, rgba(255,143,163,.18), transparent 60%)', pointerEvents: 'none' }} />
+        <div style={{ animation: 'bobPreview 3.4s ease-in-out infinite' }}>
+          <CharacterSprite character={character} />
         </div>
-        <p style={{ fontWeight: 'bold', color: '#8a6d4b', marginTop: '0.5rem' }}>{char.name}</p>
-        <p style={{ color: '#c47a4a', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-          {char.accessory !== 'none' ? `Wearing ${char.accessory}` : 'No accessory'}
+        <p style={{ margin: '.35rem 0 0', fontWeight: 800, fontSize: '1rem' }}>{character.name || 'Unnamed'}</p>
+        <p style={{ margin: 0, fontSize: '.72rem', color: 'rgba(245,235,230,.45)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+          {GENDERS.find(g => g.id === character.gender)?.label} · {character.outfitType} · {character.hairStyle}
         </p>
       </div>
+      <style>{`@keyframes bobPreview{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}`}</style>
 
-      {/* Controls */}
-      <div style={{ display: 'grid', gap: '1rem' }}>
-        <Field label="Name" value={char.name} onChange={v => update('name', v)} />
-        <ColorField label="Hair Color" value={char.hairColor} options={HAIR_COLORS} onChange={v => update('hairColor', v)} />
-        <SelectField label="Hair Style" value={char.hairStyle} options={HAIR_STYLES} onChange={v => update('hairStyle', v)} />
-        <ColorField label="Skin Color" value={char.skinColor} options={SKIN_COLORS} onChange={v => update('skinColor', v)} />
-        <ColorField label="Outfit Color" value={char.outfitColor} options={OUTFIT_COLORS} onChange={v => update('outfitColor', v)} />
-        <SelectField label="Outfit Type" value={char.outfitType} options={OUTFIT_TYPES} onChange={v => update('outfitType', v)} />
-        <SelectField label="Accessory" value={char.accessory} options={ACCESSORIES} onChange={v => update('accessory', v)} />
-      </div>
+      {/* Gender */}
+      <Field label="Identity">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+          {GENDERS.map(g => (
+            <button key={g.id} onClick={() => set({ gender: g.id })} style={{
+              padding: '.7rem .4rem', borderRadius: 14, cursor: 'pointer', textAlign: 'center',
+              border: character.gender === g.id ? '1px solid rgba(255,143,163,.7)' : '1px solid rgba(255,255,255,.08)',
+              background: character.gender === g.id ? 'linear-gradient(160deg,rgba(224,83,122,.28),rgba(224,83,122,.08))' : 'rgba(255,255,255,.03)',
+              color: 'inherit', transition: 'all .18s',
+            }}>
+              <div style={{ fontSize: '1.15rem', lineHeight: 1 }}>{g.icon}</div>
+              <div style={{ fontSize: '.72rem', fontWeight: 700, marginTop: 4, opacity: character.gender === g.id ? 1 : .6 }}>{g.label}</div>
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      {/* Name */}
+      <Field label="Name">
+        <input
+          value={character.name}
+          onChange={e => set({ name: e.target.value.slice(0, 18) })}
+          placeholder="Your name"
+          style={{
+            width: '100%', padding: '.75rem 1rem', borderRadius: 14, fontSize: '.92rem',
+            border: '1px solid rgba(255,255,255,.1)', background: 'rgba(255,255,255,.04)',
+            color: '#f5ebe6', outline: 'none', transition: 'border-color .18s', fontFamily: 'inherit',
+          }}
+        />
+      </Field>
+
+      {/* Hair style */}
+      <Field label="Hair style">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+          {hairStyles.map(s => (
+            <Chip key={s} active={character.hairStyle === s} onClick={() => set({ hairStyle: s })} label={cap(s)} />
+          ))}
+        </div>
+      </Field>
+
+      {/* Hair color */}
+      <Field label="Hair color">
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {HAIR_COLORS.map(c => (
+            <button key={c} onClick={() => set({ hairColor: c })} aria-label={c} style={{
+              width: 30, height: 30, borderRadius: '50%', cursor: 'pointer',
+              background: `radial-gradient(circle at 32% 28%, ${c}, ${shade(c, -22)})`,
+              border: character.hairColor === c ? '2px solid #ff8fa3' : '1px solid rgba(255,255,255,.15)',
+              boxShadow: character.hairColor === c ? '0 0 12px rgba(255,143,163,.55)' : 'none',
+              transition: 'all .15s',
+            }} />
+          ))}
+        </div>
+      </Field>
+
+      {/* Skin */}
+      <Field label="Skin tone">
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {SKIN_COLORS.map(c => (
+            <button key={c} onClick={() => set({ skinColor: c })} aria-label={c} style={{
+              width: 30, height: 30, borderRadius: '50%', cursor: 'pointer',
+              background: `radial-gradient(circle at 32% 28%, ${shade(c, 10)}, ${c})`,
+              border: character.skinColor === c ? '2px solid #ff8fa3' : '1px solid rgba(255,255,255,.15)',
+              boxShadow: character.skinColor === c ? '0 0 12px rgba(255,143,163,.55)' : 'none',
+              transition: 'all .15s',
+            }} />
+          ))}
+        </div>
+      </Field>
+
+      {/* Outfit */}
+      <Field label="Outfit">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+          {outfitTypes.map(t => (
+            <Chip key={t} active={character.outfitType === t} onClick={() => set({ outfitType: t })} label={cap(t)} />
+          ))}
+        </div>
+      </Field>
+
+      {/* Outfit color */}
+      <Field label="Outfit color">
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {OUTFIT_COLORS.map(c => (
+            <button key={c} onClick={() => set({ outfitColor: c })} aria-label={c} style={{
+              width: 30, height: 30, borderRadius: 10, cursor: 'pointer',
+              background: `linear-gradient(160deg, ${shade(c, 14)}, ${shade(c, -14)})`,
+              border: character.outfitColor === c ? '2px solid #ff8fa3' : '1px solid rgba(255,255,255,.15)',
+              boxShadow: character.outfitColor === c ? '0 0 12px rgba(255,143,163,.55)' : 'none',
+              transition: 'all .15s',
+            }} />
+          ))}
+        </div>
+      </Field>
+
+      {/* Accessory */}
+      <Field label="Accessory">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+          {ACCESSORIES.map(a => (
+            <button key={a} onClick={() => set({ accessory: a })} style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '.45rem .65rem',
+              borderRadius: 12, cursor: 'pointer', fontSize: '.72rem', fontWeight: 700,
+              border: character.accessory === a ? '1px solid rgba(255,143,163,.7)' : '1px solid rgba(255,255,255,.08)',
+              background: character.accessory === a ? 'linear-gradient(160deg,rgba(224,83,122,.28),rgba(224,83,122,.08))' : 'rgba(255,255,255,.03)',
+              color: 'inherit', transition: 'all .15s',
+            }}>
+              <span>{ACC_ICONS[a] ?? '✨'}</span>{cap(a)}
+            </button>
+          ))}
+        </div>
+      </Field>
+    </section>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: '1.15rem' }}>
+      <p style={{
+        margin: '0 0 .5rem', fontSize: '.68rem', fontWeight: 800, textTransform: 'uppercase',
+        letterSpacing: '.12em', color: 'rgba(245,235,230,.45)',
+      }}>{label}</p>
+      {children}
     </div>
   );
 }
 
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function Chip({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
   return (
-    <div>
-      <label style={{ fontSize: '0.85rem', color: '#8a6d4b', fontWeight: 600 }}>{label}</label>
-      <input
-        type="text"
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        style={{
-          width: '100%', padding: '0.6rem 0.8rem', borderRadius: '0.75rem',
-          border: '2px solid #f5d0a9', background: '#fff', fontSize: '1rem',
-          outline: 'none', transition: 'border-color 0.2s',
-        }}
-        onFocus={e => (e.target.style.borderColor = '#d46a6a')}
-        onBlur={e => (e.target.style.borderColor = '#f5d0a9')}
-      />
-    </div>
+    <button onClick={onClick} style={{
+      padding: '.45rem .8rem', borderRadius: 12, cursor: 'pointer',
+      fontSize: '.74rem', fontWeight: 700,
+      border: active ? '1px solid rgba(255,143,163,.7)' : '1px solid rgba(255,255,255,.08)',
+      background: active ? 'linear-gradient(160deg,rgba(224,83,122,.3),rgba(224,83,122,.08))' : 'rgba(255,255,255,.03)',
+      color: active ? '#ffd9e1' : 'rgba(245,235,230,.7)',
+      transition: 'all .15s',
+    }}>{label}</button>
   );
 }
 
-function ColorField({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (v: string) => void }) {
-  return (
-    <div>
-      <label style={{ fontSize: '0.85rem', color: '#8a6d4b', fontWeight: 600 }}>{label}</label>
-      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
-        {options.map(opt => (
-          <button
-            key={opt}
-            onClick={() => onChange(opt)}
-            style={{
-              width: 32, height: 32, borderRadius: '50%',
-              background: opt,
-              border: value === opt ? '3px solid #d46a6a' : '2px solid #e8c5a0',
-              cursor: 'pointer', transition: 'transform 0.1s',
-              boxShadow: value === opt ? '0 2px 6px rgba(212,106,106,0.3)' : 'none',
-            }}
-            aria-label={opt}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SelectField({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (v: string) => void }) {
-  return (
-    <div>
-      <label style={{ fontSize: '0.85rem', color: '#8a6d4b', fontWeight: 600 }}>{label}</label>
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        style={{
-          width: '100%', padding: '0.6rem 0.8rem', borderRadius: '0.75rem',
-          border: '2px solid #f5d0a9', background: '#fff', fontSize: '1rem',
-          marginTop: '0.4rem', cursor: 'pointer',
-        }}
-      >
-        {options.map(opt => <option key={opt} value={opt}>{opt.charAt(0).toUpperCase() + opt.slice(1)}</option>)}
-      </select>
-    </div>
-  );
+function cap(s: string) { return s.charAt(0).toUpperCase() + s.slice(1); }
+function shade(hex: string, amt: number) {
+  const h = hex.replace('#', '');
+  const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+  const r = Math.max(0, Math.min(255, ((n >> 16) & 255) + amt));
+  const g = Math.max(0, Math.min(255, ((n >> 8) & 255) + amt));
+  const b = Math.max(0, Math.min(255, (n & 255) + amt));
+  return `rgb(${r},${g},${b})`;
 }

@@ -1,2 +1,2 @@
-export const SOCKET_URL =
-  "https://e47d1873593f1af2-171-61-31-186.serveousercontent.com";
+// Socket connection URL — local dev uses localhost; production via tunnel.
+export const SOCKET_URL = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';

@@ -48,8 +48,8 @@ app.prepare().then(() => {
       socket.to(room).emit('player-moved', { id: socket.id, x, y, character });
     });
 
-    socket.on('send-hug', ({ room, to, hugType, message }) => {
-      io.to(to).emit('receive-hug', { from: socket.id, hugType, message });
+    socket.on('send-hug', ({ room, to, variant, message, fromName }) => {
+      io.to(to).emit('receive-hug', { from: socket.id, variant, message, fromName });
     });
 
     socket.on('disconnect', () => {

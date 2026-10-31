@@ -2,151 +2,184 @@
 import { useState } from 'react';
 import CharacterBuilder from '@/components/CharacterBuilder';
 import RoomScene from '@/components/RoomScene';
-import HugScene3D from '@/components/HugScene3D';
 import SoundPlayer from '@/components/SoundPlayer';
-import LiveHugRoom from '@/components/LiveHugRoom';
 import Particles from '@/components/Particles';
 import HugMessage from '@/components/HugMessage';
 import { DEFAULT_CHARACTER } from '@/lib/character-state';
-import { HUG_TYPES } from '@/lib/hug-types';
-import { playHugSound } from '@/lib/sounds';
+import { HUG_VARIANTS } from '@/types';
 import { Character } from '@/types';
+
+const STATS = [
+  { label: 'Hugs shared', key: 'hugs' },
+  { label: 'Rooms joined', key: 'rooms' },
+];
 
 export default function HomePage() {
   const [character, setCharacter] = useState<Character>(DEFAULT_CHARACTER);
-  const [mode, setMode] = useState<'room' | '3d'>('room');
-  const [showParticles, setShowParticles] = useState(false);
-  const [message, setMessage] = useState('');
-  const [hugCount, setHugCount] = useState(0);
   const [roomId, setRoomId] = useState('cozy-living-room');
+  const [mode, setMode] = useState<'room' | 'sound'>('room');
+  const [particles, setParticles] = useState(false);
+  const [message, setMessage] = useState('');
+  const [counts, setCounts] = useState({ hugs: 0, rooms: 0 });
 
-  const sendGlobalHug = () => {
-    const hug = HUG_TYPES[Math.floor(Math.random() * HUG_TYPES.length)];
-    setMessage(`💝 You sent a ${hug.label} hug into the universe!`);
-    setHugCount(c => c + 1);
-    setShowParticles(true);
-    playHugSound(hug.soundNote, hug.durationMs, hug.intensity);
-    setTimeout(() => setShowParticles(false), 2200);
+  const celebrate = (text: string) => {
+    setMessage(text);
+    setParticles(true);
+    setTimeout(() => setParticles(false), 2400);
+  };
+
+  const onHugSent = (variant: string) => {
+    setCounts(c => ({ ...c, hugs: c.hugs + 1 }));
+    const v = HUG_VARIANTS.find(x => x.id === variant);
+    celebrate(`💝 ${v?.label ?? 'Hug'} hug delivered!`);
   };
 
   return (
     <main style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(180deg, #fff8f0 0%, #fff5eb 30%, #ffe4d6 70%, #fff0e6 100%)',
-      fontFamily: 'system-ui, -apple-system, Segoe UI, sans-serif',
-      padding: '2rem 1rem', overflowX: 'hidden',
+      minHeight: '100vh', position: 'relative', overflow: 'hidden',
+      background: 'radial-gradient(ellipse 90% 60% at 50% -10%, #3a2836 0%, transparent 60%), radial-gradient(ellipse 70% 50% at 85% 100%, rgba(90,122,224,.14) 0%, transparent 60%), linear-gradient(180deg, #1b1620 0%, #221a26 45%, #1a151e 100%)',
+      color: '#f5ebe6', fontFamily: 'ui-rounded, system-ui, -apple-system, Segoe UI, sans-serif',
     }}>
-      <Particles active={showParticles} />
+      {/* grain */}
+      <div style={{
+        position: 'fixed', inset: 0, pointerEvents: 'none', opacity: .05, zIndex: 0,
+        backgroundImage: 'repeating-conic-gradient(rgba(255,255,255,.5) 0% 0.0001%, transparent 0% 0.0002%)',
+        backgroundSize: '3px 3px',
+      }} />
+      <Particles active={particles} />
       <HugMessage message={message} onDismiss={() => setMessage('')} />
 
-      <header style={{ textAlign: 'center', padding: '1.5rem 1rem 2rem' }}>
-        <div style={{
-          display: 'inline-block', padding: '0.3rem 1rem', borderRadius: '2rem',
-          background: '#fff5eb', border: '2px solid #f5d0a9', marginBottom: '0.75rem',
-          fontSize: '0.7rem', fontWeight: 700, color: '#c47a4a', letterSpacing: '0.12em',
-        }}>VIRTUAL HUG SIMULATOR</div>
-        <h1 style={{ fontSize: 'clamp(2.2rem, 5vw, 3.8rem)', color: '#c47a4a', margin: '0.2rem 0', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
-          Cozy Hug Rooms
-        </h1>
-        <p style={{ fontSize: '1rem', color: '#a07850', maxWidth: 520, margin: '0.5rem auto 0', lineHeight: 1.6 }}>
-          Customize your character, walk around the room, meet people, and share hugs — live, cozy, together.
-        </p>
-        <div style={{ marginTop: '0.9rem', display: 'flex', gap: '0.4rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-          {['🚶 Move Around', '👥 People List', '💝 8 Hug Types', '🎵 Sound', '🧊 3D Mode', '🌐 Live Sockets'].map(t => (
-            <span key={t} style={{
-              padding: '0.3rem 0.8rem', borderRadius: '1rem', background: '#fff',
-              border: '1px solid #f5d0a9', fontSize: '0.72rem', color: '#8a6d4b', fontWeight: 600,
-            }}>{t}</span>
-          ))}
-        </div>
-      </header>
-
-      <section style={{ maxWidth: 720, margin: '0 auto 2.5rem', textAlign: 'center' }}>
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap', justifyContent: 'center',
-          background: '#fff', borderRadius: '2rem', padding: '0.9rem 1.75rem',
-          boxShadow: '0 6px 25px rgba(212,106,106,0.1)', border: '2px solid #f5d0a9',
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: 900, margin: '0 auto', padding: '2rem 1.1rem 3rem' }}>
+        {/* NAV */}
+        <nav style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: '2.25rem', flexWrap: 'wrap', gap: '.8rem',
         }}>
-          <div>
-            <p style={{ fontSize: '0.65rem', color: '#c47a4a', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 800, margin: 0 }}>Hugs Shared</p>
-            <p style={{ fontSize: '1.8rem', fontWeight: 900, color: '#d46a6a', margin: 0, lineHeight: 1 }}>{hugCount}</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem' }}>
+            <div style={{
+              width: 34, height: 34, borderRadius: 12, display: 'grid', placeItems: 'center',
+              background: 'linear-gradient(160deg,#e0537a,#8a5ae0)', boxShadow: '0 6px 18px rgba(224,83,122,.4)',
+              fontSize: '1rem',
+            }}>💝</div>
+            <span style={{ fontWeight: 800, fontSize: '1rem', letterSpacing: '-0.02em' }}>Hugroom</span>
           </div>
-          <div style={{ width: 1, height: 36, background: '#f5d0a9' }} />
-          <button
-            onClick={sendGlobalHug}
-            style={{
-              padding: '0.75rem 1.7rem', borderRadius: '2rem', border: 'none',
-              background: 'linear-gradient(135deg, #d46a6a, #c47a4a)', color: '#fff',
-              fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer',
-              boxShadow: '0 5px 20px rgba(212,106,106,0.3)', transition: 'transform 0.1s',
-            }}
-            onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.96)')}
-            onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
-          >💝 Send Global Hug</button>
-        </div>
-      </section>
+          <div style={{
+            display: 'flex', gap: 2, background: 'rgba(255,255,255,.05)',
+            border: '1px solid rgba(255,255,255,.08)', borderRadius: 999, padding: 3,
+          }}>
+            {(['room', 'sound'] as const).map(m => (
+              <button key={m} onClick={() => setMode(m)} style={{
+                padding: '.42rem 1rem', borderRadius: 999, border: 'none', cursor: 'pointer',
+                fontSize: '.78rem', fontWeight: 700, textTransform: 'capitalize',
+                background: mode === m ? 'linear-gradient(160deg,#e0537a,#c73a63)' : 'transparent',
+                color: mode === m ? '#fff' : 'rgba(245,235,230,.6)', transition: 'all .18s',
+              }}>{m === 'room' ? 'Room' : 'Sounds'}</button>
+            ))}
+          </div>
+        </nav>
 
-      <section style={{ maxWidth: 580, margin: '0 auto 2.5rem' }}>
-        <CharacterBuilder character={character} onChange={setCharacter} />
-      </section>
+        {/* HERO */}
+        <header style={{ textAlign: 'center', marginBottom: '2rem' }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px',
+            borderRadius: 999, background: 'rgba(224,83,122,.13)',
+            border: '1px solid rgba(255,143,163,.25)', color: '#ffd9e1',
+            fontSize: '.68rem', fontWeight: 700, letterSpacing: '.04em', marginBottom: '1rem',
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#6ee7a8' }} />
+            Live cozy rooms · real-time hugs
+          </div>
+          <h1 style={{
+            margin: 0, fontSize: 'clamp(2.1rem, 5.2vw, 3.6rem)', fontWeight: 900,
+            letterSpacing: '-0.035em', lineHeight: 1.05,
+            background: 'linear-gradient(160deg,#fff 30%,#ffb9c9 75%,#c9a0ff)',
+            WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
+          }}>
+            Hug someone<br />across the screen.
+          </h1>
+          <p style={{
+            margin: '.9rem auto 0', maxWidth: 480, fontSize: '.95rem', lineHeight: 1.65,
+            color: 'rgba(245,235,230,.55)',
+          }}>
+            Build your avatar, walk into the room, and share a hug with whoever's there.
+          </p>
+        </header>
 
-      {/* Room controls */}
-      <section style={{ maxWidth: 820, margin: '0 auto 1.5rem' }}>
-        <div style={{
-          display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '1rem',
+        {/* ROOM BAR */}
+        <section style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          gap: '.6rem', flexWrap: 'wrap', marginBottom: '1.4rem',
         }}>
-          <div style={{ display: 'flex', background: '#fff', borderRadius: '1.5rem', padding: 4, border: '2px solid #f5d0a9' }}>
-            <button onClick={() => setMode('room')} style={{
-              padding: '0.55rem 1.3rem', borderRadius: '1.5rem', border: 'none', cursor: 'pointer',
-              background: mode === 'room' ? 'linear-gradient(135deg,#d46a6a,#c47a4a)' : 'transparent',
-              color: mode === 'room' ? '#fff' : '#8a6d4b', fontWeight: 700, fontSize: '0.85rem',
-            }}>🏠 Room</button>
-            <button onClick={() => setMode('3d')} style={{
-              padding: '0.55rem 1.3rem', borderRadius: '1.5rem', border: 'none', cursor: 'pointer',
-              background: mode === '3d' ? 'linear-gradient(135deg,#d46a6a,#c47a4a)' : 'transparent',
-              color: mode === '3d' ? '#fff' : '#8a6d4b', fontWeight: 700, fontSize: '0.85rem',
-            }}>🧊 3D</button>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '.5rem',
+            background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.09)',
+            borderRadius: 999, padding: '4px 4px 4px 14px',
+          }}>
+            <span style={{ fontSize: '.72rem', color: 'rgba(245,235,230,.45)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>Room</span>
             <input
               value={roomId}
               onChange={e => setRoomId(e.target.value || 'cozy-living-room')}
-              placeholder="Room name"
               style={{
-                padding: '0.55rem 1rem', borderRadius: '1.5rem', border: '2px solid #f5d0a9',
-                background: '#fff', fontSize: '0.85rem', color: '#5a3d2b', width: 180, outline: 'none',
+                width: 168, padding: '.42rem .7rem', borderRadius: 999, border: 'none',
+                background: 'rgba(255,255,255,.06)', color: '#f5ebe6',
+                fontSize: '.82rem', outline: 'none', fontFamily: 'inherit',
               }}
             />
-            <button onClick={() => setRoomId(`room-${Math.random().toString(36).slice(2, 7)}`)} title="Random room" style={{
-              padding: '0.55rem 0.9rem', borderRadius: '1.5rem', border: 'none', background: '#c47a4a',
-              color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.85rem',
-            }}>🎲</button>
           </div>
-        </div>
+          <button
+            onClick={() => { setRoomId(`room-${Math.random().toString(36).slice(2, 8)}`); setCounts(c => ({ ...c, rooms: c.rooms + 1 })); }}
+            style={{
+              padding: '.55rem 1rem', borderRadius: 999, cursor: 'pointer',
+              background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.09)',
+              color: 'rgba(245,235,230,.75)', fontSize: '.78rem', fontWeight: 700,
+            }}
+          >🎲 New room</button>
+          <button
+            onClick={() => celebrate('💝 Hug sent to everyone in the room!')}
+            style={{
+              padding: '.55rem 1.2rem', borderRadius: 999, cursor: 'pointer', border: 'none',
+              background: 'linear-gradient(160deg,#e0537a,#c73a63)', color: '#fff',
+              fontSize: '.82rem', fontWeight: 800,
+              boxShadow: '0 8px 22px rgba(224,83,122,.4)',
+            }}
+          >💝 Hug the room</button>
+        </section>
 
+        {/* STATS */}
+        <section style={{
+          display: 'flex', gap: '.7rem', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '1.8rem',
+        }}>
+          {STATS.map(s => (
+            <div key={s.key} style={{
+              background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)',
+              borderRadius: 18, padding: '.6rem 1.2rem', textAlign: 'center', minWidth: 130,
+            }}>
+              <p style={{ margin: 0, fontSize: '1.4rem', fontWeight: 900, color: '#ffb9c9' }}>{counts[s.key as keyof typeof counts]}</p>
+              <p style={{ margin: 0, fontSize: '.66rem', color: 'rgba(245,235,230,.45)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>{s.label}</p>
+            </div>
+          ))}
+        </section>
+
+        {/* MAIN */}
         {mode === 'room' ? (
-          <RoomScene myCharacter={character} roomId={roomId} onHugSent={() => setHugCount(c => c + 1)} />
+          <>
+            <RoomScene myCharacter={character} roomId={roomId} onHugSent={onHugSent} />
+            <div style={{ marginTop: '2rem' }}>
+              <CharacterBuilder character={character} onChange={setCharacter} />
+            </div>
+          </>
         ) : (
-          <HugScene3D />
+          <SoundPlayer />
         )}
-      </section>
 
-      <section style={{ maxWidth: 640, margin: '0 auto 2.5rem' }}>
-        <SoundPlayer />
-      </section>
-
-      <section style={{ maxWidth: 640, margin: '0 auto 2.5rem' }}>
-        <LiveHugRoom />
-      </section>
-
-      <footer style={{
-        textAlign: 'center', padding: '1.5rem 1rem', color: '#c4a484',
-        fontSize: '0.8rem', borderTop: '2px solid #f5d0a9', marginTop: '2rem',
-      }}>
-        <p style={{ margin: 0 }}>Made with 💝 · Virtual Hug Simulator</p>
-        <p style={{ margin: '0.2rem 0 0', opacity: 0.7, fontSize: '0.72rem' }}>Cozy. Warm. Connected.</p>
-      </footer>
+        <footer style={{
+          marginTop: '3rem', paddingTop: '1.5rem', textAlign: 'center',
+          borderTop: '1px solid rgba(255,255,255,.07)',
+          fontSize: '.72rem', color: 'rgba(245,235,230,.35)',
+        }}>
+          Hugroom · built for cozy connections
+        </footer>
+      </div>
     </main>
   );
 }

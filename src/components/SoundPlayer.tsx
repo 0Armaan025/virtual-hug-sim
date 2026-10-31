@@ -1,89 +1,69 @@
 "use client";
 import { useState, useRef } from 'react';
-import { HUG_TYPES } from '@/lib/hug-types';
-import { playHugSound, playBackgroundMusic } from '@/lib/sounds';
 
 export default function SoundPlayer() {
-  const [volume, setVolume] = useState(0.5);
-  const [bgPlaying, setBgPlaying] = useState(false);
-  const bgStopRef = useRef<(() => void) | null>(null);
+  const [muted, setMuted] = useState(false);
+  const bgRef = useRef<AudioContext | null>(null);
 
-  const handlePlay = (hug: typeof HUG_TYPES[0]) => {
-    playHugSound(hug.soundNote, hug.durationMs, hug.intensity);
+  const play = (freq: number, dur: number, type: OscillatorType = 'sine') => {
+    if (muted) return;
+    try {
+      const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = type; o.frequency.value = freq;
+      g.gain.value = .12; g.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + dur / 1000);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(); setTimeout(() => { o.stop(); ctx.close(); }, dur);
+    } catch { }
   };
 
-  const toggleBackground = () => {
-    if (bgPlaying) {
-      bgStopRef.current?.();
-      setBgPlaying(false);
-    } else {
-      const stop = playBackgroundMusic();
-      bgStopRef.current = stop || null;
-      setBgPlaying(true);
-      setTimeout(() => {
-        stop?.();
-        setBgPlaying(false);
-        bgStopRef.current = null;
-      }, 10000);
-    }
+  const toggleBg = () => {
+    if (bgRef.current) { bgRef.current.close(); bgRef.current = null; return; }
+    try {
+      const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      bgRef.current = ctx;
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = 110; g.gain.value = .025;
+      o.connect(g); g.connect(ctx.destination); o.start();
+    } catch { }
   };
 
   return (
-    <div style={{
-      background: '#fff8f0', borderRadius: '1.5rem', padding: '1.5rem',
-      maxWidth: '600px', margin: '0 auto', boxShadow: '0 4px 20px rgba(212,106,106,0.1)',
+    <section style={{
+      background: 'linear-gradient(165deg, rgba(255,255,255,.05), rgba(255,255,255,.02))',
+      border: '1px solid rgba(255,255,255,.09)', borderRadius: 26,
+      backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+      boxShadow: '0 24px 60px rgba(0,0,0,.45)', padding: '1.25rem', maxWidth: 520,
+      margin: '0 auto',
     }}>
-      <h3 style={{ color: '#c47a4a', marginBottom: '1rem', textAlign: 'center' }}>Sounds</h3>
-
-      {/* Background music toggle */}
-      <div style={{ marginBottom: '1rem', textAlign: 'center' }}>
-        <button
-          onClick={toggleBackground}
-          style={{
-            padding: '0.6rem 1.2rem', borderRadius: '1rem', border: 'none',
-            background: bgPlaying ? '#8a6d4b' : '#d46a6a', color: '#fff',
-            fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s',
-          }}
-        >
-          {bgPlaying ? 'Stop Background Music' : 'Play Cozy Background Music'}
-        </button>
-      </div>
-
-      {/* Hug sound buttons */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'center' }}>
-        {HUG_TYPES.map(ht => (
-          <button
-            key={ht.id}
-            onClick={() => handlePlay(ht)}
-            style={{
-              padding: '0.5rem 0.8rem', borderRadius: '0.75rem',
-              border: '2px solid #f5d0a9', background: '#fff',
-              color: '#8a6d4b', fontSize: '0.8rem', cursor: 'pointer',
-              transition: 'all 0.15s', fontWeight: 600,
-            }}
-            onMouseEnter={e => (e.currentTarget.style.borderColor = '#d46a6a')}
-            onMouseLeave={e => (e.currentTarget.style.borderColor = '#f5d0a9')}
-          >
-            {ht.label}
+      <h3 style={{ margin: 0, fontSize: '.85rem', fontWeight: 800, color: '#f5ebe6', letterSpacing: '.08em', textTransform: 'uppercase' }}>Cozy sounds</h3>
+      <div style={{ margin: '.75rem 0', display: 'flex', gap: '.5rem' }}>
+        {[340, 410, 490, 590, 710].map(f => (
+          <button key={f} onClick={() => play(f, 600)} style={{
+            width: 40, height: 40, borderRadius: 14, cursor: 'pointer',
+            border: '1px solid rgba(255,255,255,.1)', background: 'rgba(255,255,255,.05)',
+            color: '#f5ebe6', transition: 'transform .12s',
+          }} onMouseDown={e => e.currentTarget.style.transform = 'scale(.92)'}
+          onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}>
+            {f >= 590 ? '🎵' : f >= 490 ? '🎶' : '♪'}
           </button>
         ))}
       </div>
-
-      {/* Volume */}
-      <div style={{ marginTop: '1rem', textAlign: 'center' }}>
-        <label style={{ fontSize: '0.85rem', color: '#8a6d4b', fontWeight: 600 }}>
-          Volume: {Math.round(volume * 100)}%
-        </label>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.1"
-          value={volume}
-          onChange={e => setVolume(parseFloat(e.target.value))}
-          style={{ width: '200px', marginLeft: '0.5rem' }}
-        />
-      </div>
-    </div>
+      <button
+        onClick={() => { setMuted(!muted); toggleBg(); }}
+        style={{
+          width: '100%', marginTop: '.5rem', padding: '.6rem 1rem', borderRadius: 14, cursor: 'pointer',
+          border: 'none', background: 'linear-gradient(160deg,#e0537a,#c73a63)', color: '#fff',
+          fontWeight: 800, fontSize: '.85rem', boxShadow: '0 6px 18px rgba(224,83,122,.4)',
+        }}
+      >
+        {bgRef.current ? 'Stop ambience' : 'Start ambience'} &nbsp;·&nbsp; {muted ? 'Unmute' : 'Mute'}
+      </button>
+    </section>
   );
 }
