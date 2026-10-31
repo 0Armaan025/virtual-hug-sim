@@ -1,15 +1,14 @@
 "use client";
-import { useState } from 'react';
 import { Character } from '@/types';
 import {
   DEFAULT_CHARACTER, HAIR_COLORS, HAIR_STYLES, SKIN_COLORS, OUTFIT_COLORS, OUTFIT_TYPES, ACCESSORIES,
 } from '@/lib/character-state';
 
-export default function CharacterBuilder() {
-  const [char, setChar] = useState<Character>(DEFAULT_CHARACTER);
+export default function CharacterBuilder({ character, onChange }: { character: Character; onChange: (c: Character) => void }) {
+  const char = character;
 
   const update = (field: keyof Character, value: string) => {
-    setChar({ ...char, [field]: value });
+    onChange({ ...char, [field]: value });
   };
 
   return (
