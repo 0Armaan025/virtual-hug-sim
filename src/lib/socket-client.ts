@@ -1,12 +1,15 @@
-import { io, Socket } from "socket.io-client";
-import { SOCKET_URL } from "./socket-config";
+import { io, Socket } from 'socket.io-client';
+import { SOCKET_URL } from './socket-config';
 
 let socket: Socket | null = null;
 
 export function getSocket() {
   if (!socket) {
     socket = io(SOCKET_URL, {
-      transports: ["polling", "websocket"],
+      transports: ['polling', 'websocket'],
+      withCredentials: true,
+      upgrade: true,
+      rememberUpgrade: false,
     });
   }
   return socket;

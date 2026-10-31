@@ -6,8 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "local-server": "node local-server.js",
-    "lint": "next lint"
+    "lint": "next lint",
+    "local-server": "node local-server.cjs"
   },
   "dependencies": {
     "next": "16.4.3",
