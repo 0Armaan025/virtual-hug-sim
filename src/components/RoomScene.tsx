@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from 'react';
 import CharacterSprite from './CharacterSprite';
-import { Character, HUG_VARIANTS } from '@/types';
+import { Character } from '@/types';
 import { useSocket } from '@/lib/use-socket';
 import { playHugSound } from '@/lib/sounds';
 import { USER_ID } from '@/lib/socket-config';
@@ -19,12 +19,9 @@ interface RoomPlayer {
   hugUntil?: number;
 }
 
-interface HugPair {
-  me: RoomPlayer;
-  them: RoomPlayer;
-  variant: string;
-  x: number;
-  y: number;
+interface HuggingPair {
+  a: string;   // userId of me
+  b: string;   // userId of them
   since: number;
 }
 
@@ -34,10 +31,11 @@ export default function RoomScene({ myCharacter, roomId }: { myCharacter: Charac
   const { socket, connected } = useSocket();
   const roomRef = useRef<HTMLDivElement>(null);
   const [players, setPlayers] = useState<RoomPlayer[]>([]);
-  const [hugPair, setHugPair] = useState<HugPair | null>(null);
+  const [hugging, setHugging] = useState<HuggingPair | null>(null);
   const [log, setLog] = useState<string[]>([]);
   const keys = useRef<{ [k: string]: boolean }>({});
 
+  // ---- self init ----
   useEffect(() => {
     setPlayers(prev => {
       const others = prev.filter(p => !p.isSelf);
@@ -50,6 +48,7 @@ export default function RoomScene({ myCharacter, roomId }: { myCharacter: Charac
     setPlayers(prev => prev.map(p => (p.isSelf ? { ...p, name: myCharacter.name || 'You', character: myCharacter, gender: myCharacter.gender } : p)));
   }, [myCharacter]);
 
+  // ---- socket ----
   useEffect(() => {
     if (!socket) return;
     const join = () => socket.emit('join-room', { room: roomId, player: { name: myCharacter.name || 'You', character: myCharacter, userId: USER_ID } });
@@ -65,8 +64,8 @@ export default function RoomScene({ myCharacter, roomId }: { myCharacter: Charac
     const onMoved = (d: any) => setPlayers(prev => prev.map(p => (p.userId === d.userId ? { ...p, x: d.x, y: d.y, walking: true } : p)));
     const onLeft = (userId: string) => setPlayers(prev => prev.filter(p => p.userId !== userId));
     const onReceive = (d: any) => {
-      playHugSound('G', 1500, 0.4);
-      setPlayers(prev => prev.map(p => (p.id === d.from ? { ...p, hugUntil: Date.now() + 2600 } : p)));
+      playHugSound('G', 1400, 0.4);
+      setPlayers(prev => prev.map(p => (p.userId === d.from || p.id === d.from ? { ...p, hugUntil: Date.now() + 3000 } : p)));
       setLog(l => [...l.slice(-7), `💝 ${d.fromName || 'Someone'} hugged you${d.message ? `: "${d.message}"` : ''}`]);
     };
 
@@ -82,6 +81,7 @@ export default function RoomScene({ myCharacter, roomId }: { myCharacter: Charac
     };
   }, [socket, connected, roomId, myCharacter]);
 
+  // ---- keyboard movement ----
   useEffect(() => {
     const down = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = true; };
     const up = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = false; };
@@ -90,13 +90,14 @@ export default function RoomScene({ myCharacter, roomId }: { myCharacter: Charac
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
   }, []);
 
+  // ---- loop ----
   useEffect(() => {
     let raf = 0;
     const step = () => {
       setPlayers(prev => {
         const next = prev.map(p => ({ ...p }));
-        const self = next.find(p => p.isSelf);
-        if (self && !self.hugUntil) {
+        const self = next.find(p => p.isSelf && !p.hugUntil);
+        if (self) {
           let dx = 0, dy = 0;
           const k = keys.current;
           if (k['arrowleft'] || k['a']) dx -= 1;
@@ -117,10 +118,11 @@ export default function RoomScene({ myCharacter, roomId }: { myCharacter: Charac
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  // ---- broadcast ----
   useEffect(() => {
     const t = setInterval(() => {
-      const self = players.find(p => p.isSelf);
-      if (self && !self.hugUntil && socket && connected) socket.emit('move', { room: roomId, x: self.x, y: self.y });
+      const self = players.find(p => p.isSelf && !p.hugUntil);
+      if (self && socket && connected) socket.emit('move', { room: roomId, x: self.x, y: self.y });
     }, 120);
     return () => clearInterval(t);
   }, [players, socket, connected, roomId]);
@@ -134,68 +136,51 @@ export default function RoomScene({ myCharacter, roomId }: { myCharacter: Charac
   };
 
   const hug = useCallback((target: RoomPlayer) => {
-    const variant = HUG_VARIANTS[Math.floor(Math.random() * HUG_VARIANTS.length)].id;
-    playHugSound('G', 1500, 0.4);
-    const self = players.find(p => p.isSelf);
-    if (!self) return;
+    const self = players.find(p => p.isSelf && !p.hugUntil);
+    if (!self || target.hugUntil) return;
+    playHugSound('G', 1400, 0.4);
     const mx = (self.x + target.x) / 2;
-    const my = (self.y + target.y) / 2;
-    setPlayers(prev => prev.map(p => (p.id === target.id ? { ...p, hugUntil: Date.now() + 3000 } : p)));
-    setHugPair({ me: self, them: target, variant, x: mx, y: my, since: Date.now() });
-    setLog(l => [...l.slice(-7), `💝 You hugged ${target.name} (${HUG_VARIANTS.find(v => v.id === variant)?.label})`]);
-    if (socket && connected) socket.emit('send-hug', { room: roomId, to: target.userId, variant, message: '', fromName: myCharacter.name || 'You' });
+    const my = (self.y + target.y) / 2 - 8;
+    setPlayers(prev => prev.map(p => (p.userId === self.userId || p.userId === target.userId ? { ...p, hugUntil: Date.now() + 2800 } : p)));
+    setHugging({ a: self.userId, b: target.userId, since: Date.now() });
+    setLog(l => [...l.slice(-7), `💝 You hugged ${target.name}`]);
+    if (socket && connected) socket.emit('send-hug', { room: roomId, to: target.userId, variant: 'human', message: '', fromName: myCharacter.name || 'You' });
   }, [socket, connected, roomId, players, myCharacter.name]);
 
   const self = players.find(p => p.isSelf);
-  const onlineOthers = players.filter(p => !p.isSelf && !p.hugUntil);
+  const huggingPair = hugging ? players.filter(p => p.userId === hugging.a || p.userId === hugging.b) : [];
 
-  const renderHugPair = () => {
-    if (!hugPair || !self) return null;
-    const { me, them, variant, x: hx, y: hy, since } = hugPair;
-    const age = Date.now() - since;
-    if (age > 3000) return null;
-    const sway = Math.sin(Date.now() / 120) * 3;
-
-    return (
-      <div style={{ position: 'absolute', left: `${hx}%`, top: `${hy - 10}%`, transform: 'translate(-50%, -100%) rotate(' + sway + 'deg)', zIndex: 999, animation: variant === 'spin' ? 'hugSpin 1.6s linear infinite' : undefined }}>
-        <div style={{ position: 'absolute', top: 90, left: -34, width: 62, height: 44, background: 'rgba(0,0,0,.12)', borderRadius: '50% 50% 40% 40%', transform: 'rotate(-12deg)' }} />
-        <div style={{ position: 'absolute', top: 90, right: -34, width: 62, height: 44, background: 'rgba(0,0,0,.12)', borderRadius: '50% 50% 40% 40%', transform: 'rotate(12deg)' }} />
-        <div style={{ position: 'relative', transform: variant === 'lean' ? 'rotate(-10deg)' : 'none', marginRight: 28 }}>
-          <CharacterSprite character={me.character} walking={false} flip={false} />
-        </div>
-        <div style={{ position: 'relative', transform: variant === 'lean' ? 'rotate(10deg)' : 'none', marginLeft: 28 }}>
-          <CharacterSprite character={them.character} walking={false} flip={true} />
-        </div>
-        <div style={{ position: 'absolute', top: 30, left: '50%', transform: 'translateX(-50%)', width: 44, height: 44, background: 'rgba(255,143,163,.35)', borderRadius: '50%', filter: 'blur(8px)', zIndex: 0, animation: variant === 'squeeze' ? 'hugSqueeze 1.2s ease-in-out infinite' : 'none' }} />
-        {variant === 'spin' && <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', fontSize: '1.4rem', animation: 'heartUp 1.4s ease-out infinite' }}>💖</div>}
-      </div>
-    );
-  };
+  // midpoint for hug render
+  const hx = huggingPair.length === 2 ? (huggingPair[0].x + huggingPair[1].x) / 2 : null;
+  const hy = huggingPair.length === 2 ? (huggingPair[0].y + huggingPair[1].y) / 2 : null;
+  const hugAge = hugging ? Date.now() - hugging.since : 9999;
+  const sway = Math.sin(Date.now() / 140) * 4;
+  const bob = Math.abs(Math.sin(Date.now() / 100)) * 3;
 
   return (
     <>
       <style>{`
-        @keyframes hugSqueeze { 0%,100%{transform:translate(-50%,-100%) scale(1)} 30%{transform:translate(-50%,-100%) scale(1.12) translateY(-5px)} 60%{transform:translate(-50%,-100%) scale(.96)} }
-        @keyframes hugLean { 0%,100%{transform:translate(-50%,-100%) rotate(0deg)} 50%{transform:translate(-50%,-100%) rotate(-10deg) translateY(-4px)} }
-        @keyframes hugSpin { 0%{transform:translate(-50%,-100%) rotate(0deg)} 100%{transform:translate(-50%,-100%) rotate(360deg)} }
-        @keyframes heartUp { 0%{opacity:0;transform:translateY(0) scale(.6)} 30%{opacity:1} 100%{opacity:0;transform:translateY(-74px) scale(1.3)} }
+        @keyframes hugSway { 0%,100%{transform:translate(-50%,-100%) rotate(0deg)} 50%{transform:translate(-50%,-100%) rotate(2.5deg) translateY(-3px)} }
+        @keyframes heartUp { 0%{opacity:0;transform:translateY(0) scale(.7)} 30%{opacity:1} 100%{opacity:0;transform:translateY(-80px) scale(1.4)} }
+        @keyframes pulseGlow { 0%,100%{box-shadow:0 0 0 0 rgba(255,143,163,.45)} 50%{box-shadow:0 0 0 26px rgba(255,143,163,0)} }
       `}</style>
 
+      {/* ROOM */}
       <div
         ref={roomRef}
         onClick={moveTo}
         style={{
           position: 'relative', flex: '1 1 520px', minWidth: 320, maxWidth: 720, height: 470,
           borderRadius: 26, overflow: 'hidden', cursor: 'crosshair',
-          background: 'radial-gradient(ellipse at 50% 108%, rgba(255,143,163,.16), transparent 60%), linear-gradient(180deg, #1e1922 0%, #29202f 62%, #362738 100%)',
+          background: 'radial-gradient(ellipse at 50% 108%, rgba(255,143,163,.14), transparent 60%), linear-gradient(180deg, #1e1922 0%, #29202f 62%, #362738 100%)',
           border: '1px solid rgba(255,255,255,.09)',
           boxShadow: '0 30px 80px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.07)',
         }}
       >
         <div style={{
-          position: 'absolute', top: -70, left: '50%', transform: 'translateX(-50%)',
-          width: 300, height: 180, borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(255,214,170,.22), transparent 70%)', filter: 'blur(8px)',
+          position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)',
+          width: 320, height: 190, borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(255,214,170,.20), transparent 70%)', filter: 'blur(9px)',
         }} />
         {[0, 1, 2, 3, 4, 5, 6].map(i => (
           <div key={i} style={{
@@ -204,22 +189,57 @@ export default function RoomScene({ myCharacter, roomId }: { myCharacter: Charac
             animation: `pulseGlow ${2.4 + i * 0.25}s ease-in-out infinite`,
           }} />
         ))}
-        <div style={{ position: 'absolute', top: 52, right: 36, width: 86, height: 74, borderRadius: 14,
-          background: 'linear-gradient(160deg, rgba(120,160,220,.28), rgba(90,122,224,.16))',
-          border: '2px solid rgba(255,255,255,.12)' }}>
-          <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 2, background: 'rgba(255,255,255,.12)' }} />
-          <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 2, background: 'rgba(255,255,255,.12)' }} />
-        </div>
         <div style={{
-          position: 'absolute', bottom: 4, left: '14%', width: '72%', height: 90,
+          position: 'absolute', bottom: 4, left: '14%', width: '72%', height: 88,
           background: 'radial-gradient(ellipse at center, rgba(224,83,122,.18), rgba(90,122,224,.09) 60%, transparent 72%)',
           borderRadius: '50%', border: '1px solid rgba(255,255,255,.05)',
         }} />
 
-        {hugPair && renderHugPair()}
+        {/* human hug composite */}
+        {huggingPair.length === 2 && hugAge < 2800 && hx != null && hy != null && (
+          <div style={{
+            position: 'absolute', left: `${hx}%`, top: `${hy - 10}%`,
+            transform: `translate(-50%,-100%) rotate(${sway}deg)`,
+            zIndex: 999,
+          }}>
+            {/* embrace glow */}
+            <div style={{
+              position: 'absolute', top: 60, left: '50%', transform: 'translateX(-50%)',
+              width: 140, height: 100, borderRadius: '50%',
+              background: 'radial-gradient(circle, rgba(255,143,163,.22), transparent 60%)', filter: 'blur(14px)',
+              animation: 'pulseGlow 2s ease-in-out infinite',
+              zIndex: 0,
+            }} />
 
+            {/* me (left) arm around them */}
+            <div style={{ position: 'relative', transform: 'translateY(' + bob + 'px)' }}>
+              <CharacterSprite character={huggingPair[0].character} walking={false} flip={false} />
+              {/* me's right arm around them's waist */}
+              <div style={{ position: 'absolute', top: 62, right: -10, width: 34, height: 46, background: huggingPair[0].character.outfitColor, borderRadius: '0 14px 14px 0', border: '1px solid rgba(0,0,0,.12)', boxShadow: 'inset 0 -4px 8px rgba(0,0,0,.15)' }} />
+            </div>
+
+            {/* them (right) arm around me */}
+            <div style={{ position: 'relative', transform: 'scaleX(-1) translateY(' + bob + 'px)' }}>
+              <CharacterSprite character={huggingPair[1].character} walking={false} flip={true} />
+              {/* them's left arm around me's waist */}
+              <div style={{ position: 'absolute', top: 62, right: -10, width: 34, height: 46, background: huggingPair[1].character.outfitColor, borderRadius: '14px 0 0 14px', border: '1px solid rgba(0,0,0,.12)', boxShadow: 'inset 0 -4px 8px rgba(0,0,0,.15)' }} />
+            </div>
+
+            {/* heads close */}
+            <div style={{ position: 'absolute', top: 22, left: '50%', transform: 'translateX(-50%)',
+              width: 40, height: 40, background: 'rgba(255,143,163,.30)', borderRadius: '50%', filter: 'blur(9px)', zIndex: 0 }} />
+            {hugAge > 600 && (
+              <div style={{ position: 'absolute', top: -16, left: '50%', transform: 'translateX(-50%)', fontSize: '1.5rem', animation: 'heartUp 1.3s ease-out infinite' }}>💖</div>
+            )}
+            {hugAge > 1100 && (
+              <div style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)', fontSize: '1.2rem', animation: 'heartUp 1.5s .4s ease-out infinite' }}>✨</div>
+            )}
+          </div>
+        )}
+
+        {/* normal players (skip hugging pair) */}
         {players.map(p => {
-          if (hugPair && (p.id === hugPair.me.id || p.id === hugPair.them.id)) return null;
+          if (huggingPair.some(q => q.id === p.id)) return null;
           const d = self ? Math.hypot(((p.x - self.x) / ROOM_W) * 560, ((p.y - self.y) / ROOM_W) * 470) : 999;
           const canHug = !p.isSelf && !p.hugUntil && d < 115;
           return (
@@ -289,6 +309,7 @@ export default function RoomScene({ myCharacter, roomId }: { myCharacter: Charac
         )}
       </div>
 
+      {/* PEOPLE LIST */}
       <aside style={{
         flex: '0 0 250px', background: 'linear-gradient(165deg, rgba(255,255,255,.06), rgba(255,255,255,.02))',
         border: '1px solid rgba(255,255,255,.09)', borderRadius: 26,
@@ -299,7 +320,7 @@ export default function RoomScene({ myCharacter, roomId }: { myCharacter: Charac
         <header>
           <h3 style={{ margin: 0, fontSize: '.95rem', fontWeight: 800, letterSpacing: '-0.01em' }}>In this room</h3>
           <p style={{ margin: '.2rem 0 0', fontSize: '.7rem', color: 'rgba(245,235,230,.45)' }}>
-            {players.length} here · {onlineOthers.length} online
+            {players.length} here · {players.filter(p => !p.isSelf && connected).length} online
           </p>
         </header>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '.45rem', maxHeight: 280, overflowY: 'auto' }}>
