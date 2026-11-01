@@ -20,7 +20,6 @@ app.prepare().then(() => {
       res.end();
       return;
     }
-    // add CORS to every next response too
     const origWriteHead = res.writeHead;
     res.writeHead = function(code, headers) {
       headers = headers || {};
@@ -33,7 +32,7 @@ app.prepare().then(() => {
 
   const io = new Server(httpServer, {
     cors: {
-      origin: (origin, callback) => callback(null, origin || '*'),
+      origin: (o, cb) => cb(null, o || '*'),
       methods: ['GET', 'POST'],
       allowedHeaders: ['*'],
       credentials: true,
@@ -45,26 +44,47 @@ app.prepare().then(() => {
   const rooms = {};
   const socketMeta = {};
 
+  function roomsInfo() {
+    const info = {};
+    for (const [room] of Object.entries(rooms)) {
+      const players = Object.values(rooms[room]);
+      info[room] = {
+        id: room,
+        playerCount: players.length,
+        onlineCount: players.filter(p => p.character).length,
+      };
+    }
+    return info;
+  }
+
   io.on('connection', (socket) => {
-    console.log('Client:', socket.id);
+    console.log('Client connected:', socket.id);
+    io.emit('rooms-list', roomsInfo());
 
     socket.on('join-room', ({ room, player }) => {
+      // Leave previous room
       const meta = socketMeta[socket.id];
       if (meta && rooms[meta.room]) {
         delete rooms[meta.room][meta.userId];
-        io.to(meta.room).emit('players-update', rooms[meta.room]);
+        if (Object.keys(rooms[meta.room]).length === 0) delete rooms[meta.room];
+        io.to(meta.room).emit('players-update', rooms[meta.room] || {});
+        io.emit('rooms-list', roomsInfo());
         delete socketMeta[socket.id];
       }
+
       socket.join(room);
       if (!rooms[room]) rooms[room] = {};
+      // Deduplicate by userId
       const existingUserId = Object.keys(rooms[room]).find(
         (uid) => rooms[room][uid].id === socket.id || (player.userId && rooms[room][uid].userId === player.userId)
       );
       if (existingUserId) delete rooms[room][existingUserId];
+
       const entry = {
         id: socket.id,
         userId: player.userId || socket.id,
         name: player.name,
+        gender: player.character?.gender || 'nonbinary',
         character: player.character,
         x: 50, y: 60,
       };
@@ -72,28 +92,39 @@ app.prepare().then(() => {
       socketMeta[socket.id] = { room, userId: entry.userId };
       console.log(socket.id, 'joined', room, entry.userId);
       io.to(room).emit('players-update', rooms[room]);
+      io.emit('rooms-list', roomsInfo());
     });
 
-    socket.on('move', ({ room, x, y, character, userId }) => {
-      if (!rooms[room] || !rooms[room][userId]) return;
-      const p = rooms[room][userId];
-      p.x = x; p.y = y;
-      if (character) { p.character = character; if (character.name) p.name = character.name; }
-      socket.to(room).emit('player-moved', { userId: p.userId, x: p.x, y: p.y, character: p.character, name: p.name });
+    socket.on('move', ({ room, x, y }) => {
+      const meta = socketMeta[socket.id];
+      if (!meta) return;
+      if (!rooms[meta.room] || !rooms[meta.room][meta.userId]) return;
+      rooms[meta.room][meta.userId].x = x;
+      rooms[meta.room][meta.userId].y = y;
+      socket.to(meta.room).emit('player-moved', { userId: meta.userId, x: x, y: y });
     });
 
     socket.on('send-hug', ({ room, to, variant, message, fromName }) => {
-      const targetSocketId = rooms[room] && rooms[room][to] ? rooms[room][to].id : null;
+      const meta = socketMeta[socket.id];
+      const targetRoom = meta ? meta.room : room;
+      const targetUserId = to;
+      const targetSocketId = rooms[targetRoom] && rooms[targetRoom][targetUserId] ? rooms[targetRoom][targetUserId].id : null;
       if (targetSocketId) {
         io.to(targetSocketId).emit('receive-hug', { from: socket.id, variant, message, fromName });
       }
+    });
+
+    socket.on('get-rooms', () => {
+      socket.emit('rooms-list', roomsInfo());
     });
 
     socket.on('disconnect', () => {
       const meta = socketMeta[socket.id];
       if (meta && rooms[meta.room]) {
         delete rooms[meta.room][meta.userId];
-        io.to(meta.room).emit('players-update', rooms[meta.room]);
+        if (Object.keys(rooms[meta.room]).length === 0) delete rooms[meta.room];
+        io.to(meta.room).emit('players-update', rooms[meta.room] || {});
+        io.emit('rooms-list', roomsInfo());
       }
       delete socketMeta[socket.id];
       console.log('Disconnected:', socket.id);

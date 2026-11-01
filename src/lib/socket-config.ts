@@ -1,11 +1,12 @@
 import { getUserId } from './user-id';
 
-// Read socket URL from localStorage (user pastes serveo URL there), fallback to hardcoded
+// Default to localhost for reliable local connection.
+// Paste a serveo/ngrok URL in the page socket field to override for remote access.
 export function getSocketUrl() {
   if (typeof window !== 'undefined') {
     const stored = localStorage.getItem('hugroom_socket_url');
     if (stored) return stored;
   }
-  return 'https://810adc861d9ff92b-171-61-31-186.serveousercontent.com';
+  return 'http://localhost:3000';
 }
 export const USER_ID = getUserId();

@@ -27,18 +27,27 @@ interface HugPair {
   since: number;
 }
 
+interface RoomInfo {
+  id: string;
+  name: string;
+  playerCount: number;
+  onlineCount: number;
+}
+
 const ROOM_W = 100;
 
-export default function RoomScene({ myCharacter, roomId, joined }: { myCharacter: Character; roomId: string; joined?: boolean }) {
+export default function RoomScene({ myCharacter, roomId: initialRoomId, joined: initialJoined }: { myCharacter: Character; roomId?: string; joined?: boolean }) {
   const { socket, connected } = useSocket();
   const roomRef = useRef<HTMLDivElement>(null);
   const [players, setPlayers] = useState<RoomPlayer[]>([]);
-  const [hasJoined, setHasJoined] = useState(false);
+  const [roomsList, setRoomsList] = useState<RoomInfo[]>([]);
   const [hugPair, setHugPair] = useState<HugPair | null>(null);
   const [log, setLog] = useState<string[]>([]);
+  const [roomInput, setRoomInput] = useState(initialRoomId || 'cozy-living-room');
+  const [joined, setJoined] = useState(!!initialJoined);
   const keys = useRef<{ [k: string]: boolean }>({});
 
-  // self always present
+  // Self always present
   useEffect(() => {
     setPlayers(prev => {
       const others = prev.filter(p => !p.isSelf);
@@ -46,54 +55,62 @@ export default function RoomScene({ myCharacter, roomId, joined }: { myCharacter
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
   useEffect(() => {
     setPlayers(prev => prev.map(p => (p.isSelf ? { ...p, name: myCharacter.name || 'You', character: myCharacter, gender: myCharacter.gender } : p)));
   }, [myCharacter]);
 
-  // socket
+  // Socket events
   useEffect(() => {
     if (!socket) return;
 
-    const onUpdate = (dict: any) => {
+    const onRooms = (rooms: any) => {
+      const list: RoomInfo[] = (Object.values(rooms || {}) as any[]).filter((r: any) => r && r.playerCount >= 0);
+      setRoomsList(list);
+    };
+
+    const onPlayers = (dict: any) => {
       const list = Object.values(dict || {}).map((p: any) => ({ id: p.id, userId: p.userId, name: p.name, gender: p.character?.gender, character: p.character, x: p.x, y: p.y }));
       setPlayers(prev => {
         const self = prev.find(p => p.isSelf);
         return self ? [self, ...list.filter(p => p.userId !== self.userId)] : list;
       });
     };
+
     const onMoved = (d: any) => setPlayers(prev => prev.map(p => (p.userId === d.userId ? { ...p, x: d.x, y: d.y, walking: true } : p)));
+
     const onLeft = (userId: string) => setPlayers(prev => prev.filter(p => p.userId !== userId));
+
     const onReceive = (d: any) => {
       playHugSound('G', 1400, 0.4);
       setPlayers(prev => prev.map(p => (p.userId === d.from || p.id === d.from ? { ...p, hugUntil: Date.now() + 3000 } : p)));
       setLog(l => [...l.slice(-7), `💝 ${d.fromName || 'Someone'} hugged you${d.message ? `: "${d.message}"` : ''}`]);
     };
 
-    socket.on('players-update', onUpdate);
+    socket.on('rooms-list', onRooms);
+    socket.on('players-update', onPlayers);
     socket.on('player-moved', onMoved);
     socket.on('player-left', onLeft);
     socket.on('receive-hug', onReceive);
+
+    socket.emit('get-rooms');
     return () => {
-      socket.off('players-update', onUpdate);
+      socket.off('rooms-list', onRooms);
+      socket.off('players-update', onPlayers);
       socket.off('player-moved', onMoved);
       socket.off('player-left', onLeft);
       socket.off('receive-hug', onReceive);
     };
   }, [socket, connected, myCharacter]);
 
-  const handleJoin = () => {
-    if (!socket) return;
-    socket.emit('join-room', { room: roomId, player: { name: myCharacter.name || 'You', character: myCharacter, userId: USER_ID } });
-    setHasJoined(true);
-  };
-
-  // auto-join when prop becomes true
+  // Auto join when joined=true
   useEffect(() => {
-    if (!joined || !socket || !connected || hasJoined) return;
-    handleJoin();
-  }, [joined, socket, connected, hasJoined, roomId, myCharacter]);
+    if (!joined || !socket || !connected) return;
+    socket.emit('join-room', { room: roomInput, player: { name: myCharacter.name || 'You', character: myCharacter, userId: USER_ID } });
+    setJoined(true);
+  }, [joined, socket, connected, roomInput, myCharacter]);
 
-  // socket
+  // Keyboard movement
   useEffect(() => {
     const down = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = true; };
     const up = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = false; };
@@ -102,7 +119,7 @@ export default function RoomScene({ myCharacter, roomId, joined }: { myCharacter
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
   }, []);
 
-  // loop
+  // Loop
   useEffect(() => {
     let raf = 0;
     const step = () => {
@@ -130,14 +147,14 @@ export default function RoomScene({ myCharacter, roomId, joined }: { myCharacter
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // broadcast position
+  // Broadcast position
   useEffect(() => {
     const t = setInterval(() => {
       const self = players.find(p => p.isSelf && !p.hugUntil);
-      if (self && socket && connected && hasJoined) socket.emit('move', { room: roomId, x: self.x, y: self.y });
+      if (self && socket && connected && joined) socket.emit('move', { room: roomInput, x: self.x, y: self.y });
     }, 120);
     return () => clearInterval(t);
-  }, [players, socket, connected, roomId, joined]);
+  }, [players, socket, connected, roomInput, joined]);
 
   const moveTo = (e: React.MouseEvent) => {
     const rect = roomRef.current?.getBoundingClientRect();
@@ -156,8 +173,15 @@ export default function RoomScene({ myCharacter, roomId, joined }: { myCharacter
     setPlayers(prev => prev.map(p => (p.userId === self.userId || p.userId === target.userId ? { ...p, hugUntil: Date.now() + 3000 } : p)));
     setHugPair({ me: self, them: target, x: mx, y: my, since: Date.now() });
     setLog(l => [...l.slice(-7), `💝 You hugged ${target.name}`]);
-    if (socket && connected) socket.emit('send-hug', { room: roomId, to: target.userId, variant: 'human', message: '', fromName: myCharacter.name || 'You' });
-  }, [socket, connected, roomId, players, myCharacter.name]);
+    if (socket && connected) socket.emit('send-hug', { room: roomInput, to: target.userId, variant: 'human', message: '', fromName: myCharacter.name || 'You' });
+  }, [socket, connected, roomInput, players, myCharacter.name]);
+
+  const joinRoom = (roomName: string) => {
+    if (!socket || !connected) return;
+    socket.emit('join-room', { room: roomName, player: { name: myCharacter.name || 'You', character: myCharacter, userId: USER_ID } });
+    setRoomInput(roomName);
+    setJoined(true);
+  };
 
   const self = players.find(p => p.isSelf);
   const huggingPair = hugPair ? players.filter(p => p.userId === hugPair.me.userId || p.userId === hugPair.them.userId) : [];
@@ -174,6 +198,49 @@ export default function RoomScene({ myCharacter, roomId, joined }: { myCharacter
         @keyframes heartUp { 0%{opacity:0;transform:translateY(0) scale(.7)} 30%{opacity:1} 100%{opacity:0;transform:translateY(-80px) scale(1.4)} }
         @keyframes pulseGlow { 0%,100%{box-shadow:0 0 0 0 rgba(255,143,163,.45)} 50%{box-shadow:0 0 0 26px rgba(255,143,163,0)} }
       `}</style>
+
+      {/* ROOM HEADER */}
+      <header style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '1.5rem', background: 'rgba(20,16,24,.6)', backdropFilter: 'blur(8px)',
+        borderBottom: '1px solid rgba(255,255,255,.08)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h3 style={{ margin: 0, color: '#ffb9c9', fontWeight: 800, fontSize: '1.1rem' }}>🏠 Room</h3>
+          <span style={{
+            padding: '2px 10px', borderRadius: 999,
+            background: connected && joined ? 'rgba(110,231,168,.2)' : connected ? 'rgba(255,214,170,.2)' : 'rgba(255,143,163,.2)',
+            border: '1px solid ' + (connected && joined ? 'rgba(110,231,168,.4)' : connected ? 'rgba(255,214,170,.4)' : 'rgba(255,143,163,.4)'),
+            color: connected && joined ? '#8ceaaa' : connected ? '#ffd9a0' : '#ff8fa3',
+            fontSize: '.65rem', fontWeight: 800, textTransform: 'uppercase',
+          }}>
+            {joined && connected ? 'LIVE IN ROOM' : joined ? 'JOINING...' : connected ? 'OFFLINE' : 'DISCONNECTED'}
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: '.7rem', color: 'rgba(245,235,230,.4)' }}>Room:</span>
+          <input
+            value={roomInput}
+            onChange={e => setRoomInput(e.target.value)}
+            style={{
+              width: 140, padding: '.4rem .7rem', borderRadius: 10, border: '1px solid rgba(255,255,255,.1)',
+              background: 'rgba(255,255,255,.05)', color: '#f5ebe6', fontSize: '.8rem', outline: 'none', fontFamily: 'inherit',
+            }}
+          />
+          <button
+            onClick={() => joinRoom(roomInput)}
+            disabled={!socket || !connected || joined}
+            style={{
+              padding: '.4rem 1rem', borderRadius: 10, border: 'none', cursor: joined || !connected ? 'default' : 'pointer',
+              background: joined || !connected ? 'rgba(255,255,255,.15)' : 'linear-gradient(160deg,#e0537a,#c73a63)',
+              color: joined || !connected ? 'rgba(245,235,230,.4)' : '#fff',
+              fontSize: '.75rem', fontWeight: 800,
+            }}
+          >
+            {joined ? 'Joined' : !connected ? 'Offline' : 'Join'}
+          </button>
+        </div>
+      </header>
 
       {/* ROOM */}
       <div
@@ -221,23 +288,20 @@ export default function RoomScene({ myCharacter, roomId, joined }: { myCharacter
               zIndex: 0,
             }} />
 
-            {/* me on left - arm around them */}
+            {/* me (left) - arm around them */}
             <div style={{ position: 'relative', transform: `translateY(${bob}px)` }}>
               <CharacterSprite character={huggingPair[0].character} walking={false} flip={false} />
-              {/* me's arm around them's shoulder + waist — clearly human */}
-              <div style={{ position: 'absolute', top: 48, left: -6, width: 34, height: 56, background: 'linear-gradient(160deg, #5a3d2b, #3e2b1e)', borderRadius: '18px 0 0 18px', border: '1px solid rgba(255,255,255,.14)', boxShadow: 'inset 0 -6px 12px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.2)' }} />
-              <div style={{ position: 'absolute', top: 72, left: 28, width: 28, height: 20, background: 'linear-gradient(90deg, #3e2b1e, #5a3d2b)', borderRadius: '12px 0 0 12px', border: '1px solid rgba(255,255,255,.12)' }} />
+              <div style={{ position: 'absolute', top: 48, left: -6, width: 34, height: 56, background: 'linear-gradient(160deg,#5a3d2b,#3e2b1e)', borderRadius: '18px 0 0 18px', border: '1px solid rgba(255,255,255,.14)', boxShadow: 'inset 0 -6px 12px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.2)' }} />
+              <div style={{ position: 'absolute', top: 72, left: 28, width: 28, height: 20, background: 'linear-gradient(90deg,#3e2b1e,#5a3d2b)', borderRadius: '12px 0 0 12px', border: '1px solid rgba(255,255,255,.12)' }} />
             </div>
 
-            {/* them on right - arm around me */}
+            {/* them (right) - arm around me */}
             <div style={{ position: 'relative', transform: `scaleX(-1) translateY(${bob}px)` }}>
               <CharacterSprite character={huggingPair[1].character} walking={false} flip={true} />
-              {/* them's left arm around me's shoulder + waist */}
-              <div style={{ position: 'absolute', top: 48, left: -6, width: 34, height: 56, background: 'linear-gradient(160deg, #3e2b1e, #5a3d2b)', borderRadius: '0 18px 18px 0', border: '1px solid rgba(255,255,255,.14)', boxShadow: 'inset 0 -6px 12px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.2)' }} />
-              <div style={{ position: 'absolute', top: 72, right: 28, width: 28, height: 20, background: 'linear-gradient(-90deg, #3e2b1e, #5a3d2b)', borderRadius: '0 12px 12px 0', border: '1px solid rgba(255,255,255,.12)' }} />
+              <div style={{ position: 'absolute', top: 48, left: -6, width: 34, height: 56, background: 'linear-gradient(-160deg,#5a3d2b,#3e2b1e)', borderRadius: '0 18px 18px 0', border: '1px solid rgba(255,255,255,.14)', boxShadow: 'inset 0 -6px 12px rgba(0,0,0,.35)' }} />
+              <div style={{ position: 'absolute', top: 72, right: 28, width: 28, height: 20, background: 'linear-gradient(-90deg,#3e2b1e,#5a3d2b)', borderRadius: '0 12px 12px 0', border: '1px solid rgba(255,255,255,.12)' }} />
             </div>
 
-            {/* heads close together */}
             <div style={{ position: 'absolute', top: 24, left: '50%', transform: 'translateX(-50%)',
               width: 38, height: 38, background: 'rgba(255,143,163,.30)', borderRadius: '50%', filter: 'blur(9px)', zIndex: 0 }} />
             {hugAge > 500 && (
@@ -318,56 +382,90 @@ export default function RoomScene({ myCharacter, roomId, joined }: { myCharacter
         )}
       </div>
 
-      {/* PEOPLE LIST */}
+      {/* PEOPLE LIST + ROOM LIST */}
       <aside style={{
-        flex: '0 0 250px', background: 'linear-gradient(165deg, rgba(255,255,255,.06), rgba(255,255,255,.02))',
+        flex: '0 0 260px', background: 'linear-gradient(165deg, rgba(255,255,255,.06), rgba(255,255,255,.02))',
         border: '1px solid rgba(255,255,255,.09)', borderRadius: 26,
         backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
         boxShadow: '0 24px 60px rgba(0,0,0,.45)',
         padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '.9rem',
       }}>
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, fontSize: '.95rem', fontWeight: 800, letterSpacing: '-0.01em' }}>In this room</h3>
-          <span style={{ fontSize: '.65rem', padding: '2px 8px', borderRadius: 999, background: connected && hasJoined ? 'rgba(110,231,168,.2)' : connected && !hasJoined ? 'rgba(255,214,170,.2)' : 'rgba(255,143,163,.2)', color: connected && hasJoined ? '#6ee7a8' : connected && !hasJoined ? '#ffd9a0' : '#ff8fa3', border: connected && hasJoined ? '1px solid rgba(110,231,168,.4)' : connected && !hasJoined ? '1px solid rgba(255,214,170,.4)' : '1px solid rgba(255,143,163,.4)' }}>
-            {hasJoined && connected ? 'JOINED' : hasJoined ? 'JOINING...' : 'NOT JOINED'}
-          </span>
-        </header>
-        <p style={{ margin: '.2rem 0 0', fontSize: '.7rem', color: 'rgba(245,235,230,.45)' }}>
-          {players.filter(p => !p.isSelf).length} here
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '.45rem', maxHeight: 260, overflowY: 'auto' }}>
-          {players.map(p => (
-            <div key={p.id} style={{
-              display: 'flex', alignItems: 'center', gap: '.6rem',
-              background: p.isSelf ? 'linear-gradient(160deg,rgba(224,83,122,.20),rgba(224,83,122,.05))' : 'rgba(255,255,255,.03)',
-              border: p.isSelf ? '1px solid rgba(255,143,163,.4)' : '1px solid rgba(255,255,255,.06)',
-              borderRadius: 14, padding: '.5rem .6rem',
-            }}>
-              <div style={{ width: 40, height: 52, flex: '0 0 40px', overflow: 'visible', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-                <div style={{ transform: 'scale(.38)', transformOrigin: 'bottom center', width: 110, height: 168 }} >
-                  <CharacterSprite character={p.character} />
+        {/* Open Rooms List */}
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '.6rem' }}>
+            <h4 style={{ margin: 0, color: '#ffb9c9', fontSize: '.85rem', fontWeight: 800 }}>Open Rooms</h4>
+            <button
+              onClick={() => socket?.emit('get-rooms')}
+              style={{
+                padding: '2px 8px', borderRadius: 8, border: 'none', background: 'rgba(255,255,255,.08)',
+                color: '#fff', fontSize: '.65rem', fontWeight: 700, cursor: 'pointer',
+              }}
+            >Refresh</button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '.35rem', maxHeight: 200, overflowY: 'auto' }}>
+            {roomsList.length === 0 && (
+              <p style={{ fontSize: '.7rem', color: 'rgba(245,235,230,.35)', textAlign: 'center' }}>No rooms yet</p>
+            )}
+            {roomsList.map(r => (
+              <button
+                key={r.id}
+                onClick={() => { setRoomInput(r.id); joinRoom(r.id); }}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '.5rem .7rem', borderRadius: 10, cursor: 'pointer',
+                  border: '1px solid rgba(255,255,255,.08)',
+                  background: roomInput === r.id ? 'rgba(224,83,122,.2)' : 'rgba(255,255,255,.03)',
+                  transition: 'all .15s',
+                }}
+              >
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: '.75rem', fontWeight: 700, color: '#f5ebe6' }}>{r.id}</span>
+                  <span style={{ fontSize: '.62rem', color: 'rgba(245,235,230,.4)', marginLeft: 6 }}>{r.playerCount} person{r.playerCount === 1 ? '' : 's'}</span>
                 </div>
-              </div>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <p style={{ margin: 0, fontSize: '.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <span style={{
-                    width: 6, height: 6, borderRadius: '50%',
-                    background: p.isSelf ? '#ff8fa3' : (connected ? '#6ee7a8' : 'rgba(255,255,255,.25)'),
-                  }} />
-                  {p.name}{p.isSelf && <span style={{ opacity: .5, fontSize: '.68rem' }}>you</span>}
-                </p>
-                <p style={{ margin: '.15rem 0 0', fontSize: '.66rem', color: 'rgba(245,235,230,.45)', textTransform: 'capitalize' }}>
-                  {p.gender === 'nonbinary' ? 'nb' : p.gender} · {p.character.outfitType} · {p.character.accessory !== 'none' ? p.character.accessory : 'plain'}
-                </p>
-              </div>
-              {p.hugUntil && <span style={{ fontSize: '.9rem' }}>💝</span>}
-            </div>
-          ))}
-          {players.filter(p => !p.isSelf).length === 0 && connected && hasJoined && (
-            <p style={{ fontSize: '.7rem', color: 'rgba(245,235,230,.4)', textAlign: 'center', padding: '.8rem 0' }}>
-              No one else here yet. Share the room name!
-            </p>
-          )}
+                <span style={{ fontSize: '.7rem', color: '#ffb9c9', fontWeight: 800 }}>{r.playerCount}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Current Room Players */}
+        <div>
+          <h4 style={{ margin: 0, color: '#ffb9c9', fontSize: '.85rem', fontWeight: 800 }}>People in room</h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '.45rem', maxHeight: 180, overflowY: 'auto' }}>
+            {players.filter(p => !p.isSelf).length === 0 ? (
+              <p style={{ fontSize: '.7rem', color: 'rgba(245,235,230,.4)', textAlign: 'center', padding: '.8rem 0' }}>
+                No one else here yet. Share the room name!
+              </p>
+            ) : (
+              players.map(p => (
+                <div key={p.id} style={{
+                  display: 'flex', alignItems: 'center', gap: '.6rem',
+                  background: p.isSelf ? 'linear-gradient(160deg,rgba(224,83,122,.20),rgba(224,83,122,.05))' : 'rgba(255,255,255,.03)',
+                  border: p.isSelf ? '1px solid rgba(255,143,163,.4)' : '1px solid rgba(255,255,255,.06)',
+                  borderRadius: 14, padding: '.5rem .6rem',
+                }}>
+                  <div style={{ width: 40, height: 52, flex: '0 0 40px', overflow: 'visible', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+                    <div style={{ transform: 'scale(.38)', transformOrigin: 'bottom center', width: 110, height: 168 }} >
+                      <CharacterSprite character={p.character} />
+                    </div>
+                  </div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <p style={{ margin: 0, fontSize: '.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span style={{
+                        width: 6, height: 6, borderRadius: '50%',
+                        background: p.isSelf ? '#ff8fa3' : (connected ? '#6ee7a8' : 'rgba(255,255,255,.25)'),
+                      }} />
+                      {p.name}{p.isSelf && <span style={{ opacity: .5, fontSize: '.68rem' }}>you</span>}
+                    </p>
+                    <p style={{ margin: '.15rem 0 0', fontSize: '.66rem', color: 'rgba(245,235,230,.45)', textTransform: 'capitalize' }}>
+                      {p.gender === 'nonbinary' ? 'nb' : p.gender} · {p.character.outfitType} · {p.character.accessory !== 'none' ? p.character.accessory : 'plain'}
+                    </p>
+                  </div>
+                  {p.hugUntil && <span style={{ fontSize: '.9rem' }}>💝</span>}
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
         <div style={{ background: 'rgba(0,0,0,.22)', borderRadius: 14, padding: '.7rem', minHeight: 64, maxHeight: 110, overflowY: 'auto' }}>
