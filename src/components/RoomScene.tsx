@@ -224,15 +224,17 @@ export default function RoomScene({ myCharacter, roomId, joined }: { myCharacter
             {/* me on left - arm around them */}
             <div style={{ position: 'relative', transform: `translateY(${bob}px)` }}>
               <CharacterSprite character={huggingPair[0].character} walking={false} flip={false} />
-              {/* me's right arm around them's waist */}
-              <div style={{ position: 'absolute', top: 58, right: -8, width: 36, height: 50, background: huggingPair[0].character.outfitColor, borderRadius: '0 14px 14px 0', border: '1px solid rgba(0,0,0,.12)', boxShadow: 'inset 0 -4px 8px rgba(0,0,0,.15)' }} />
+              {/* me's arm around them's shoulder + waist — clearly human */}
+              <div style={{ position: 'absolute', top: 48, left: -6, width: 34, height: 56, background: 'linear-gradient(160deg, #5a3d2b, #3e2b1e)', borderRadius: '18px 0 0 18px', border: '1px solid rgba(255,255,255,.14)', boxShadow: 'inset 0 -6px 12px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.2)' }} />
+              <div style={{ position: 'absolute', top: 72, left: 28, width: 28, height: 20, background: 'linear-gradient(90deg, #3e2b1e, #5a3d2b)', borderRadius: '12px 0 0 12px', border: '1px solid rgba(255,255,255,.12)' }} />
             </div>
 
             {/* them on right - arm around me */}
             <div style={{ position: 'relative', transform: `scaleX(-1) translateY(${bob}px)` }}>
               <CharacterSprite character={huggingPair[1].character} walking={false} flip={true} />
-              {/* them's left arm around me's waist */}
-              <div style={{ position: 'absolute', top: 58, right: -8, width: 36, height: 50, background: huggingPair[1].character.outfitColor, borderRadius: '14px 0 0 14px', border: '1px solid rgba(0,0,0,.12)', boxShadow: 'inset 0 -4px 8px rgba(0,0,0,.15)' }} />
+              {/* them's left arm around me's shoulder + waist */}
+              <div style={{ position: 'absolute', top: 48, left: -6, width: 34, height: 56, background: 'linear-gradient(160deg, #3e2b1e, #5a3d2b)', borderRadius: '0 18px 18px 0', border: '1px solid rgba(255,255,255,.14)', boxShadow: 'inset 0 -6px 12px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.2)' }} />
+              <div style={{ position: 'absolute', top: 72, right: 28, width: 28, height: 20, background: 'linear-gradient(-90deg, #3e2b1e, #5a3d2b)', borderRadius: '0 12px 12px 0', border: '1px solid rgba(255,255,255,.12)' }} />
             </div>
 
             {/* heads close together */}
