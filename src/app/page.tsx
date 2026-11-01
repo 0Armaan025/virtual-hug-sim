@@ -163,7 +163,7 @@ export default function HomePage() {
         {/* MAIN */}
         {mode === 'room' ? (
           <>
-            <RoomScene myCharacter={character} roomId={roomId} onHugSent={onHugSent} />
+            <RoomScene myCharacter={character} roomId={roomId} />
             <div style={{ marginTop: '2rem' }}>
               <CharacterBuilder character={character} onChange={setCharacter} />
             </div>

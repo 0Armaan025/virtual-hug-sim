@@ -1,4 +1,4 @@
-// Socket connection URL — local dev uses localhost; production via tunnel.
+import { getUserId } from './user-id';
 
-export const SOCKET_URL =
-  "https://78a6aa8cf4c53700-171-61-31-186.serveousercontent.com";
+export const SOCKET_URL = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+export const USER_ID = getUserId();

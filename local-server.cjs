@@ -26,40 +26,67 @@ app.prepare().then(() => {
     allowEIO3: true,
   });
 
-  // roomId -> { socketId: { id, name, character, x, y } }
+  // roomId -> { userId: { id, userId, name, character, x, y } }
   const rooms = {};
+  // socket.id -> { room, userId } for quick cleanup
+  const socketMeta = {};
 
   io.on('connection', (socket) => {
     console.log('Client:', socket.id);
 
     socket.on('join-room', ({ room, player }) => {
+      // leave any previous room for this socket
+      const meta = socketMeta[socket.id];
+      if (meta && rooms[meta.room]) {
+        delete rooms[meta.room][meta.userId];
+        io.to(meta.room).emit('players-update', rooms[meta.room]);
+        delete socketMeta[socket.id];
+      }
+
       socket.join(room);
       if (!rooms[room]) rooms[room] = {};
-      rooms[room][socket.id] = { id: socket.id, name: player.name, character: player.character, x: 50, y: 55 };
-      console.log(socket.id, 'joined', room);
+      // dedupe by userId: replace any existing entry for this user in this room
+      const existingUserId = Object.keys(rooms[room]).find(
+        (uid) => rooms[room][uid].id === socket.id || (player.userId && rooms[room][uid].userId === player.userId)
+      );
+      if (existingUserId) delete rooms[room][existingUserId];
+
+      const entry = {
+        id: socket.id,
+        userId: player.userId || socket.id,
+        name: player.name,
+        character: player.character,
+        x: 50, y: 60,
+      };
+      rooms[room][entry.userId] = entry;
+      socketMeta[socket.id] = { room, userId: entry.userId };
+      console.log(socket.id, 'joined', room, entry.userId);
       io.to(room).emit('players-update', rooms[room]);
     });
 
-    socket.on('move', ({ room, x, y, character }) => {
-      if (!rooms[room] || !rooms[room][socket.id]) return;
-      const p = rooms[room][socket.id];
+    socket.on('move', ({ room, x, y, character, userId }) => {
+      if (!rooms[room] || !rooms[room][userId]) return;
+      const p = rooms[room][userId];
       p.x = x; p.y = y;
-      if (character) { p.character = character; p.name = character.name || p.name; }
-      socket.to(room).emit('player-moved', { id: socket.id, x, y, character });
+      if (character) { p.character = character; if (character.name) p.name = character.name; }
+      socket.to(room).emit('player-moved', { userId: p.userId, x: p.x, y: p.y, character: p.character, name: p.name });
     });
 
     socket.on('send-hug', ({ room, to, variant, message, fromName }) => {
-      io.to(to).emit('receive-hug', { from: socket.id, variant, message, fromName });
+      // to is userId
+      const targetSocketId = rooms[room] && rooms[room][to] ? rooms[room][to].id : null;
+      if (targetSocketId) {
+        io.to(targetSocketId).emit('receive-hug', { from: socket.id, variant, message, fromName });
+      }
     });
 
     socket.on('disconnect', () => {
-      for (const room of Object.keys(rooms)) {
-        if (rooms[room][socket.id]) {
-          delete rooms[room][socket.id];
-          io.to(room).emit('player-left', socket.id);
-          io.to(room).emit('players-update', rooms[room]);
-        }
+      const meta = socketMeta[socket.id];
+      if (meta && rooms[meta.room]) {
+        delete rooms[meta.room][meta.userId];
+        io.to(meta.room).emit('players-update', rooms[meta.room]);
       }
+      delete socketMeta[socket.id];
       console.log('Disconnected:', socket.id);
     });
   });
