@@ -8,6 +8,7 @@ export function useSocket() {
 
   useEffect(() => {
     const socket = socketRef.current;
+    if (!socket) return;
 
     socket.on('connect', () => {
       setConnected(true);
