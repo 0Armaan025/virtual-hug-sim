@@ -22,6 +22,16 @@ export default function HomePage() {
   const [message, setMessage] = useState('');
   const [counts, setCounts] = useState({ hugs: 0, rooms: 0 });
   const [joined, setJoined] = useState(false);
+  const [socketUrl, setSocketUrl] = useState(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem('hugroom_socket_url') || '';
+    return '';
+  });
+
+  const saveSocketUrl = () => {
+    localStorage.setItem('hugroom_socket_url', socketUrl);
+    window.location.reload();
+  };
+
 
   const celebrate = (text: string) => {
     setMessage(text);
@@ -144,6 +154,34 @@ export default function HomePage() {
               boxShadow: '0 8px 22px rgba(224,83,122,.4)',
             }}
           >🚪 Join Room</button>
+
+          {/* Socket URL input (paste your serveo tunnel URL here) */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '.4rem',
+            background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,143,163,.2)',
+            borderRadius: 999, padding: '4px 4px 4px 10px',
+          }}>
+            <span style={{ fontSize: '.68rem', color: 'rgba(255,143,163,.7)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>Socket</span>
+            <input
+              value={socketUrl}
+              onChange={e => setSocketUrl(e.target.value)}
+              placeholder="https://xxxx.serveousercontent.com"
+              style={{
+                width: 200, padding: '.42rem .7rem', borderRadius: 999, border: 'none',
+                background: 'rgba(255,255,255,.06)', color: '#f5ebe6',
+                fontSize: '.78rem', outline: 'none', fontFamily: 'inherit',
+              }}
+            />
+            <button
+              onClick={saveSocketUrl}
+              title="Save socket URL (paste serveo URL here)"
+              style={{
+                padding: '.42rem .75rem', borderRadius: 999, border: 'none', cursor: 'pointer',
+                background: 'rgba(255,143,163,.2)', color: '#ffd9e1',
+                fontSize: '.72rem', fontWeight: 800,
+              }}
+            >Save</button>
+          </div>
         </section>
 
         {/* STATS */}
