@@ -16,11 +16,12 @@ const STATS = [
 
 export default function HomePage() {
   const [character, setCharacter] = useState<Character>(DEFAULT_CHARACTER);
-  const [roomId, setRoomId] = useState('cozy-living-room');
+  const [roomId, setRoomId] = useState('xyz');
   const [mode, setMode] = useState<'room' | 'sound'>('room');
   const [particles, setParticles] = useState(false);
   const [message, setMessage] = useState('');
   const [counts, setCounts] = useState({ hugs: 0, rooms: 0 });
+  const [joined, setJoined] = useState(false);
 
   const celebrate = (text: string) => {
     setMessage(text);
@@ -135,14 +136,14 @@ export default function HomePage() {
             }}
           >🎲 New room</button>
           <button
-            onClick={() => celebrate('💝 Hug sent to everyone in the room!')}
+            onClick={() => setJoined(true)}
             style={{
               padding: '.55rem 1.2rem', borderRadius: 999, cursor: 'pointer', border: 'none',
               background: 'linear-gradient(160deg,#e0537a,#c73a63)', color: '#fff',
               fontSize: '.82rem', fontWeight: 800,
               boxShadow: '0 8px 22px rgba(224,83,122,.4)',
             }}
-          >💝 Hug the room</button>
+          >🚪 Join Room</button>
         </section>
 
         {/* STATS */}
@@ -163,7 +164,7 @@ export default function HomePage() {
         {/* MAIN */}
         {mode === 'room' ? (
           <>
-            <RoomScene myCharacter={character} roomId={roomId} />
+            <RoomScene myCharacter={character} roomId={roomId} joined={joined} />
             <div style={{ marginTop: '2rem' }}>
               <CharacterBuilder character={character} onChange={setCharacter} />
             </div>

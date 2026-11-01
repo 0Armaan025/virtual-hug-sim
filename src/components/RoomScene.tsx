@@ -29,12 +29,11 @@ interface HugPair {
 
 const ROOM_W = 100;
 
-export default function RoomScene({ myCharacter, roomId }: { myCharacter: Character; roomId: string }) {
+export default function RoomScene({ myCharacter, roomId, joined }: { myCharacter: Character; roomId: string; joined?: boolean }) {
   const { socket, connected } = useSocket();
   const roomRef = useRef<HTMLDivElement>(null);
   const [players, setPlayers] = useState<RoomPlayer[]>([]);
-  const [joined, setJoined] = useState(false);
-  const [joining, setJoining] = useState(false);
+  const [hasJoined, setHasJoined] = useState(false);
   const [hugPair, setHugPair] = useState<HugPair | null>(null);
   const [log, setLog] = useState<string[]>([]);
   const keys = useRef<{ [k: string]: boolean }>({});
@@ -84,13 +83,17 @@ export default function RoomScene({ myCharacter, roomId }: { myCharacter: Charac
 
   const handleJoin = () => {
     if (!socket) return;
-    setJoining(true);
     socket.emit('join-room', { room: roomId, player: { name: myCharacter.name || 'You', character: myCharacter, userId: USER_ID } });
-    setJoined(true);
-    setJoining(false);
+    setHasJoined(true);
   };
 
-  // keyboard movement
+  // auto-join when prop becomes true
+  useEffect(() => {
+    if (!joined || !socket || !connected || hasJoined) return;
+    handleJoin();
+  }, [joined, socket, connected, hasJoined, roomId, myCharacter]);
+
+  // socket
   useEffect(() => {
     const down = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = true; };
     const up = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = false; };
@@ -131,7 +134,7 @@ export default function RoomScene({ myCharacter, roomId }: { myCharacter: Charac
   useEffect(() => {
     const t = setInterval(() => {
       const self = players.find(p => p.isSelf && !p.hugUntil);
-      if (self && socket && connected && joined) socket.emit('move', { room: roomId, x: self.x, y: self.y });
+      if (self && socket && connected && hasJoined) socket.emit('move', { room: roomId, x: self.x, y: self.y });
     }, 120);
     return () => clearInterval(t);
   }, [players, socket, connected, roomId, joined]);
@@ -323,8 +326,8 @@ export default function RoomScene({ myCharacter, roomId }: { myCharacter: Charac
       }}>
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0, fontSize: '.95rem', fontWeight: 800, letterSpacing: '-0.01em' }}>In this room</h3>
-          <span style={{ fontSize: '.65rem', padding: '2px 8px', borderRadius: 999, background: connected ? 'rgba(110,231,168,.2)' : 'rgba(255,143,163,.2)', color: connected ? '#6ee7a8' : '#ff8fa3', border: connected ? '1px solid rgba(110,231,168,.4)' : '1px solid rgba(255,143,163,.4)' }}>
-            {joined && connected ? 'JOINED' : joined ? 'JOINING...' : 'NOT JOINED'}
+          <span style={{ fontSize: '.65rem', padding: '2px 8px', borderRadius: 999, background: connected && hasJoined ? 'rgba(110,231,168,.2)' : connected && !hasJoined ? 'rgba(255,214,170,.2)' : 'rgba(255,143,163,.2)', color: connected && hasJoined ? '#6ee7a8' : connected && !hasJoined ? '#ffd9a0' : '#ff8fa3', border: connected && hasJoined ? '1px solid rgba(110,231,168,.4)' : connected && !hasJoined ? '1px solid rgba(255,214,170,.4)' : '1px solid rgba(255,143,163,.4)' }}>
+            {hasJoined && connected ? 'JOINED' : hasJoined ? 'JOINING...' : 'NOT JOINED'}
           </span>
         </header>
         <p style={{ margin: '.2rem 0 0', fontSize: '.7rem', color: 'rgba(245,235,230,.45)' }}>
@@ -358,7 +361,7 @@ export default function RoomScene({ myCharacter, roomId }: { myCharacter: Charac
               {p.hugUntil && <span style={{ fontSize: '.9rem' }}>💝</span>}
             </div>
           ))}
-          {players.filter(p => !p.isSelf).length === 0 && connected && (
+          {players.filter(p => !p.isSelf).length === 0 && connected && hasJoined && (
             <p style={{ fontSize: '.7rem', color: 'rgba(245,235,230,.4)', textAlign: 'center', padding: '.8rem 0' }}>
               No one else here yet. Share the room name!
             </p>
