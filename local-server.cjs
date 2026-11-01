@@ -8,49 +8,59 @@ const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
   const httpServer = createServer((req, res) => {
+    const origin = req.headers.origin || '*';
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': origin,
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': '*',
+        'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Max-Age': '86400',
       });
       res.end();
       return;
     }
+    // add CORS to every next response too
+    const origWriteHead = res.writeHead;
+    res.writeHead = function(code, headers) {
+      headers = headers || {};
+      headers['Access-Control-Allow-Origin'] = origin;
+      headers['Access-Control-Allow-Credentials'] = 'true';
+      return origWriteHead.call(res, code, headers);
+    };
     handle(req, res);
   });
 
   const io = new Server(httpServer, {
-    cors: { origin: '*', methods: ['GET', 'POST'], allowedHeaders: ['*'] },
+    cors: {
+      origin: (origin, callback) => callback(null, origin || '*'),
+      methods: ['GET', 'POST'],
+      allowedHeaders: ['*'],
+      credentials: true,
+    },
     transports: ['polling', 'websocket'],
     allowEIO3: true,
   });
 
-  // roomId -> { userId: { id, userId, name, character, x, y } }
   const rooms = {};
-  // socket.id -> { room, userId } for quick cleanup
   const socketMeta = {};
 
   io.on('connection', (socket) => {
     console.log('Client:', socket.id);
 
     socket.on('join-room', ({ room, player }) => {
-      // leave any previous room for this socket
       const meta = socketMeta[socket.id];
       if (meta && rooms[meta.room]) {
         delete rooms[meta.room][meta.userId];
         io.to(meta.room).emit('players-update', rooms[meta.room]);
         delete socketMeta[socket.id];
       }
-
       socket.join(room);
       if (!rooms[room]) rooms[room] = {};
-      // dedupe by userId: replace any existing entry for this user in this room
       const existingUserId = Object.keys(rooms[room]).find(
         (uid) => rooms[room][uid].id === socket.id || (player.userId && rooms[room][uid].userId === player.userId)
       );
       if (existingUserId) delete rooms[room][existingUserId];
-
       const entry = {
         id: socket.id,
         userId: player.userId || socket.id,
@@ -73,7 +83,6 @@ app.prepare().then(() => {
     });
 
     socket.on('send-hug', ({ room, to, variant, message, fromName }) => {
-      // to is userId
       const targetSocketId = rooms[room] && rooms[room][to] ? rooms[room][to].id : null;
       if (targetSocketId) {
         io.to(targetSocketId).emit('receive-hug', { from: socket.id, variant, message, fromName });
